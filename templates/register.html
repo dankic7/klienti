@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Регистрација – AgroFruit 2007{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6 col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-3 text-center">Регистрирај админ</h1>
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input name="email" type="email" class="form-control form-control-lg" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Лозинка</label>
+            <input name="password" type="password" class="form-control form-control-lg" required>
+          </div>
+          <button class="btn btn-success w-100">Креирај</button>
+        </form>
+        <p class="text-center mt-3"><a href="{{ url_for('login') }}">Врати се на најава</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

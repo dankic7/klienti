@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Уреди' if c else 'Нова' }} муштерија – AgroFruit 2007{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-3">{{ 'Уреди' if c else 'Нова' }} муштерија</h1>
+        <form method="post">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Име и презиме</label>
+              <input name="name" class="form-control form-control-lg" value="{{ c.name if c else '' }}" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Телефон</label>
+              <input name="phone" class="form-control form-control-lg" value="{{ c.phone if c else '' }}">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Белешка</label>
+              <textarea name="notes" class="form-control" rows="3">{{ c.notes if c else '' }}</textarea>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <a class="btn btn-outline-secondary" href="{{ url_for('index') }}">Назад</a>
+            <button class="btn btn-success">Зачувај</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

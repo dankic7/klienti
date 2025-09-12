@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Муштерии – AgroFruit 2007{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h4 mb-0">Муштерии</h1>
+  <a class="btn btn-success" href="{{ url_for('customer_new') }}">+ Нова муштерија</a>
+</div>
+
+<form class="row g-2 mb-3" method="get">
+  <div class="col-sm-8 col-md-6">
+    <input class="form-control form-control-lg" type="text" name="q" placeholder="Пребарај по име или телефон" value="{{ q }}">
+  </div>
+  <div class="col-sm-4 col-md-2">
+    <button class="btn btn-outline-success btn-lg w-100">Пребарај</button>
+  </div>
+</form>
+
+<div class="table-responsive">
+<table class="table table-hover align-middle">
+  <thead class="table-success">
+    <tr>
+      <th>Име и презиме</th>
+      <th>Телефон</th>
+      <th class="text-end">Вкупно салдо</th>
+      <th class="text-end">Детали</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in customers %}
+    <tr>
+      <td>{{ c.name }}</td>
+      <td>{{ c.phone or "-" }}</td>
+      <td class="text-end">{{ '%.2f'|format(balances[c.id]) }}</td>
+      <td class="text-end">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('customer_edit', cid=c.id) }}">Уреди</a>
+        <a class="btn btn-sm btn-success" href="{{ url_for('customer_detail', cid=c.id) }}">Отвори</a>
+        <form class="d-inline" method="post" action="{{ url_for('customer_delete', cid=c.id) }}" onsubmit="return confirm('Да ја избришам муштеријата?');">
+          <button class="btn btn-sm btn-outline-danger">Избриши</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

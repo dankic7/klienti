@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ c.name }} – Детали{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h4 mb-0">Муштерија: <span class="text-success">{{ c.name }}</span></h1>
+  <div class="text-end">
+    {% if acc %}
+      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('export_year', cid=c.id, year=acc.year) }}">TXT (година)</a>
+    {% endif %}
+    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('export_all_years_one', cid=c.id) }}">TXT (збирно)</a>
+    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('export_batch_zip', cid=c.id) }}">TXT (batch .zip)</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-body">
+        <h6 class="text-uppercase text-muted">Контакт</h6>
+        <div><strong>Телефон:</strong> {{ c.phone or "-" }}</div>
+        <div class="mt-2"><strong>Белешка:</strong><br>{{ c.notes or "-" }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-body">
+        <form class="row g-2" method="post" action="{{ url_for('select_year', cid=c.id) }}">
+          <div class="col-auto">
+            <label class="form-label">Година</label>
+            <select name="year" class="form-select">
+              {% for y in years %}
+                <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-auto align-self-end">
+            <button class="btn btn-outline-success">Додај/избери</button>
+          </div>
+        </form>
+        <hr>
+        {% if acc %}
+        <form class="row g-2" method="post" action="{{ url_for('set_initial', aid=acc.id) }}">
+          <div class="col-auto">
+            <label class="form-label">Почетен долг ({{year}})</label>
+            <input name="initial_debt" class="form-control" value="{{ '%.2f'|format(acc.initial_debt or 0) }}">
+          </div>
+          <div class="col-auto align-self-end">
+            <button class="btn btn-success">Зачувај долг</button>
+          </div>
+          <div class="col-12 mt-3">
+            <span class="badge bg-warning text-dark">Салдо за {{year}}: {{ '%.2f'|format(balance) }} ден.</span>
+          </div>
+        </form>
+        {% else %}
+        <div class="alert alert-info mb-0">Изберете или додадете година за да внесувате уплати.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if acc %}
+<div class="card">
+  <div class="card-body">
+    <h5 class="mb-3">Уплати – {{year}}</h5>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead class="table-success">
+          <tr>
+            <th>#</th>
+            <th>Датум</th>
+            <th class="text-end">Износ</th>
+            <th>Белешка</th>
+            <th class="text-end">Акции</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in acc.payments|sort(attribute='date') %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ p.date }}</td>
+            <td class="text-end">{{ '%.2f'|format(p.amount) }}</td>
+            <td>{{ p.note or "" }}</td>
+            <td class="text-end">
+              <form class="d-inline" method="post" action="{{ url_for('payment_edit', pid=p.id) }}">
+                <div class="input-group input-group-sm">
+                  <input name="date" value="{{ p.date }}" class="form-control" style="max-width:140px">
+                  <input name="amount" value="{{ '%.2f'|format(p.amount) }}" class="form-control" style="max-width:120px">
+                  <input name="note" value="{{ p.note or '' }}" class="form-control">
+                  <button class="btn btn-outline-secondary">Сними</button>
+                </div>
+              </form>
+              <form class="d-inline" method="post" action="{{ url_for('payment_delete', pid=p.id) }}" onsubmit="return confirm('Да ја избришам уплатата?');">
+                <button class="btn btn-outline-danger btn-sm">Избриши</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <hr>
+    <h6>Нова уплата</h6>
+    <form class="row g-2" method="post" action="{{ url_for('payment_new', aid=acc.id) }}">
+      <div class="col-sm-3 col-md-2">
+        <input name="date" class="form-control" value="{{ (date.today()).isoformat() }}">
+      </div>
+      <div class="col-sm-2">
+        <input name="amount" class="form-control" placeholder="износ">
+      </div>
+      <div class="col-sm-5 col-md-6">
+        <input name="note" class="form-control" placeholder="белешка (опц.)">
+      </div>
+      <div class="col-sm-2 col-md-2">
+        <button class="btn btn-success w-100">Додади</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
