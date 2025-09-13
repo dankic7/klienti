@@ -110,6 +110,17 @@ def add_klient():
 # Main
 # ------------------------------------------------------
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()  # создава табели ако не постојат
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+with app.app_context():
+    db.create_all()  # креира ги табелите ако недостасуваат
+
+    # Автоматски креира админ ако го нема
+    from werkzeug.security import generate_password_hash
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
+    admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
+
+    if admin_email and not User.query.filter_by(email=admin_email).first():
+        u = User(email=admin_email, password=generate_password_hash(admin_pass))
+        db.session.add(u)
+        db.session.commit()
+        print(f"✅ Admin created: {admin_email} / {admin_pass}")
+
