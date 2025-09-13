@@ -4,4 +4,5 @@ Flask-Login
 python-dotenv
 psycopg2-binary==2.9.9
 gunicorn
+passlib[bcrypt]==1.7.4
 
