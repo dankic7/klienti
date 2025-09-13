@@ -1,36 +1,41 @@
 # -*- coding: utf-8 -*-
 import os
-from datetime import datetime, date
+from datetime import datetime
 from decimal import Decimal
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, abort
+
+from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
+from flask_login import (
+    LoginManager, login_user, logout_user, login_required, current_user, UserMixin
+)
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 
-# Вчитај .env променливи (локално развој)
+# Вчитај .env (локално)
 load_dotenv()
 
-# Иницијализација на Flask
+# ------------------------------------------------------
+# Flask и конфигурација
+# ------------------------------------------------------
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET", "dev-secret-change-me")
 
-# PostgreSQL конекција од Render / Supabase
 db_url = os.getenv("DATABASE_URL")
 if not db_url:
-    raise RuntimeError("DATABASE_URL is not set! Please configure in Render Environment.")
+    raise RuntimeError("DATABASE_URL is not set! Add it in Render Environment.")
 
-# ✅ psycopg2 формат
+# Претвори postgres:// -> postgresql+psycopg2://
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# Иницијализација на база
 db = SQLAlchemy(app)
 
+# ------------------------------------------------------
 # Login Manager
+# ------------------------------------------------------
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
@@ -53,7 +58,7 @@ class Klient(db.Model):
     plateno = db.Column(db.Numeric(10, 2), default=0)
 
 # ------------------------------------------------------
-# Login Manager callback
+# User loader
 # ------------------------------------------------------
 @login_manager.user_loader
 def load_user(user_id):
@@ -65,7 +70,7 @@ def load_user(user_id):
 @app.route("/")
 @login_required
 def index():
-    klienti = Klient.query.all()
+    klienti = Klient.query.order_by(Klient.id.desc()).all()
     return render_template("index.html", klienti=klienti)
 
 @app.route("/login", methods=["GET", "POST"])
@@ -77,8 +82,7 @@ def login():
         if user and check_password_hash(user.password, password):
             login_user(user)
             return redirect(url_for("index"))
-        else:
-            flash("Погрешен емаил или лозинка", "danger")
+        flash("Погрешен емаил или лозинка", "danger")
     return render_template("login.html")
 
 @app.route("/logout")
@@ -90,37 +94,33 @@ def logout():
 @app.route("/add_klient", methods=["POST"])
 @login_required
 def add_klient():
-    ime = request.form.get("ime")
-    prezime = request.form.get("prezime")
-    dolg = request.form.get("dolg", 0)
-    plateno = request.form.get("plateno", 0)
+    ime = request.form.get("ime") or ""
+    prezime = request.form.get("prezime") or ""
+    dolg = Decimal(request.form.get("dolg") or "0")
+    plateno = Decimal(request.form.get("plateno") or "0")
 
-    klient = Klient(
-        ime=ime,
-        prezime=prezime,
-        dolg=Decimal(dolg),
-        plateno=Decimal(plateno)
-    )
-    db.session.add(klient)
+    k = Klient(ime=ime, prezime=prezime, dolg=dolg, plateno=plateno)
+    db.session.add(k)
     db.session.commit()
     flash("Клиентот е успешно додаден!", "success")
     return redirect(url_for("index"))
 
 # ------------------------------------------------------
-# Main
+# Старт и иницијализација (табели + админ)
 # ------------------------------------------------------
 if __name__ == "__main__":
-with app.app_context():
-    db.create_all()  # креира ги табелите ако недостасуваат
+    with app.app_context():
+        db.create_all()  # креира табели ако не постојат
 
-    # Автоматски креира админ ако го нема
-    from werkzeug.security import generate_password_hash
-    admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
-    admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
+        # Креира админ ако го нема
+        admin_email = os.getenv("ADMIN_EMAIL")
+        admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
+        if admin_email and not User.query.filter_by(email=admin_email).first():
+            u = User(email=admin_email, password=generate_password_hash(admin_pass))
+            db.session.add(u)
+            db.session.commit()
+            print(f"✅ Admin created: {admin_email} / {admin_pass}")
 
-    if admin_email and not User.query.filter_by(email=admin_email).first():
-        u = User(email=admin_email, password=generate_password_hash(admin_pass))
-        db.session.add(u)
-        db.session.commit()
-        print(f"✅ Admin created: {admin_email} / {admin_pass}")
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
 
