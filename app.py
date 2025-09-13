@@ -16,6 +16,8 @@ app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET", "dev-secret-change-me")
 import os
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///agrofruit.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+import os
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///agrofruit.db")
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -91,6 +93,15 @@ def calc_total_balance(c: Customer):
         total += calc_year_balance(acc)
     return total
 
+with app.app_context():
+    db.create_all()
+    from os import getenv
+    email = getenv("ADMIN_EMAIL", "admin@example.com")
+    if not User.query.filter_by(email=email).first():
+        u = User(email=email)
+        u.set_password("admin123")  # ќе ја смениш после логирање
+        db.session.add(u)
+        db.session.commit()
 
 # ------------- Auth routes -------------
 @app.route("/register", methods=["GET", "POST"])
