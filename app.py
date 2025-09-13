@@ -1,3 +1,6 @@
+from passlib.hash import bcrypt as bcrypt_verify
+from werkzeug.security import check_password_hash
+
 # -*- coding: utf-8 -*-
 import os
 from datetime import datetime
