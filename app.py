@@ -14,10 +14,12 @@ load_dotenv()
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET", "dev-secret-change-me")
 import os
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///agrofruit.db")
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
+
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 import os
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///agrofruit.db")
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
+
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
