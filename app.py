@@ -24,12 +24,12 @@ if not db_url:
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
 
-# SQLAlchemy + pgBouncer/SSL опции (fix за EOF/decryption грешки)
+# SQLAlchemy + pgBouncer/SSL опции
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_pre_ping": True,         # проверка пред секоја употреба (спречува stale конекции)
-    "pool_recycle": 280,           # рециклирај конекции редовно
+    "pool_pre_ping": True,
+    "pool_recycle": 280,
     "pool_size": 5,
     "max_overflow": 5,
     "connect_args": {
@@ -75,19 +75,21 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 # ------------------------------------------------------
-# Иницијализација (се извршува и на Render/gunicorn)
+# Иницијализација при старт (без before_first_request)
 # ------------------------------------------------------
-@app.before_first_request
 def init_db_and_admin():
     db.create_all()
     admin_email = os.getenv("ADMIN_EMAIL")
     admin_pass = os.getenv("ADMIN_PASSWORD")
-    if admin_email:
-        u = User.query.filter_by(email=admin_email).first()
-        if not u and admin_pass:
+    if admin_email and admin_pass:
+        if not User.query.filter_by(email=admin_email).first():
             db.session.add(User(email=admin_email,
                                 password=generate_password_hash(admin_pass)))
             db.session.commit()
+
+with app.app_context():
+    # safe/idempotent; ќе се изврши еднаш при подигање на worker
+    init_db_and_admin()
 
 # ------------------------------------------------------
 # Рути
