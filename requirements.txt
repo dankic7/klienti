@@ -4,7 +4,8 @@ Flask-Login==0.6.3
 python-dotenv==1.0.1
 Werkzeug==3.0.3
 passlib[bcrypt]==1.7.4
-psycopg2-binary==2.9.9
+pg8000==1.31.2
+sqlalchemy[postgresql]==2.0.23
 gunicorn==21.2.0
 
 
