@@ -1,4 +1,4 @@
-# app.py
+# -*- coding: utf-8 -*-
 import os
 from datetime import datetime
 from decimal import Decimal
@@ -9,11 +9,10 @@ from flask_login import (
     LoginManager, login_user, logout_user, login_required, current_user, UserMixin
 )
 from werkzeug.security import generate_password_hash, check_password_hash
-from dotenv import load_dotenv
 
-# ---- Config ------------------------------------------------------
-load_dotenv()
-
+# ------------------------------------------------------
+# Flask конфигурација
+# ------------------------------------------------------
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET", "dev-secret-change-me")
 
@@ -21,31 +20,43 @@ db_url = os.getenv("DATABASE_URL")
 if not db_url:
     raise RuntimeError("DATABASE_URL is not set!")
 
-# normalize driver prefix for SQLAlchemy
+# дозволи стар префикс ако случајно е "postgres://"
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
-elif db_url.startswith("postgresql://"):
-    db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-# Supabase бара SSL; не додавајте параметарите од pooler (pgbouncer=true) !
-if "sslmode=" not in db_url:
-    sep = "&" if "?" in db_url else "?"
-    db_url = f"{db_url}{sep}sslmode=require"
-
+# SQLAlchemy + pgBouncer/SSL опции (fix за EOF/decryption грешки)
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,         # проверка пред секоја употреба (спречува stale конекции)
+    "pool_recycle": 280,           # рециклирај конекции редовно
+    "pool_size": 5,
+    "max_overflow": 5,
+    "connect_args": {
+        "sslmode": "require",
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5,
+    },
+}
 
 db = SQLAlchemy(app)
 
-# ---- Auth --------------------------------------------------------
+# ------------------------------------------------------
+# Login Manager
+# ------------------------------------------------------
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
+# ------------------------------------------------------
+# Модели
+# ------------------------------------------------------
 class User(UserMixin, db.Model):
     __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
+    password = db.Column(db.String(255), nullable=False)
 
 class Klient(db.Model):
     __tablename__ = "klienti"
@@ -56,15 +67,31 @@ class Klient(db.Model):
     dolg = db.Column(db.Numeric(10, 2), default=0)
     plateno = db.Column(db.Numeric(10, 2), default=0)
 
+# ------------------------------------------------------
+# User loader
+# ------------------------------------------------------
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# ---- Routes ------------------------------------------------------
-@app.route("/healthz")
-def healthz():
-    return "ok", 200
+# ------------------------------------------------------
+# Иницијализација (се извршува и на Render/gunicorn)
+# ------------------------------------------------------
+@app.before_first_request
+def init_db_and_admin():
+    db.create_all()
+    admin_email = os.getenv("ADMIN_EMAIL")
+    admin_pass = os.getenv("ADMIN_PASSWORD")
+    if admin_email:
+        u = User.query.filter_by(email=admin_email).first()
+        if not u and admin_pass:
+            db.session.add(User(email=admin_email,
+                                password=generate_password_hash(admin_pass)))
+            db.session.commit()
 
+# ------------------------------------------------------
+# Рути
+# ------------------------------------------------------
 @app.route("/")
 @login_required
 def index():
@@ -74,8 +101,8 @@ def index():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
+        email = (request.form.get("email") or "").strip()
+        password = request.form.get("password") or ""
         user = User.query.filter_by(email=email).first()
         if user and check_password_hash(user.password, password):
             login_user(user)
@@ -96,27 +123,7 @@ def add_klient():
     prezime = request.form.get("prezime") or ""
     dolg = Decimal(request.form.get("dolg") or "0")
     plateno = Decimal(request.form.get("plateno") or "0")
-    k = Klient(ime=ime, prezime=prezime, dolg=dolg, plateno=plateno)
-    db.session.add(k)
+    db.session.add(Klient(ime=ime, prezime=prezime, dolg=dolg, plateno=plateno))
     db.session.commit()
     flash("Клиентот е успешно додаден!", "success")
     return redirect(url_for("index"))
-
-# ---- Bootstrap on import (IMPORTANT on Render) -------------------
-def _bootstrap():
-    with app.app_context():
-        db.create_all()
-        admin_email = os.getenv("ADMIN_EMAIL")
-        admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
-        if admin_email and not User.query.filter_by(email=admin_email).first():
-            u = User(email=admin_email.strip().lower(),
-                     password=generate_password_hash(admin_pass))
-            db.session.add(u)
-            db.session.commit()
-            app.logger.info(f"Admin created: {admin_email}")
-
-_bootstrap()  # execute at import time so Gunicorn will run it
-
-# Local dev
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
