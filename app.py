@@ -6,34 +6,31 @@ from decimal import Decimal
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (
-    LoginManager, login_user, logout_user, login_required, current_user, UserMixin
+    LoginManager, login_user, logout_user, login_required, UserMixin
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
-
-# За bcrypt хашови ако некогаш ги користиме
 from passlib.hash import bcrypt as bcrypt_verify
 
-# Вчитај .env (локално)
+# Вчитај .env
 load_dotenv()
 
 # ------------------------------------------------------
-# Flask и конфигурација
+# Flask конфигурација
 # ------------------------------------------------------
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET", "dev-secret-change-me")
+app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET", "dev-secret")
 
 db_url = os.getenv("DATABASE_URL")
 if not db_url:
-    raise RuntimeError("DATABASE_URL is not set! Add it in Render Environment.")
+    raise RuntimeError("DATABASE_URL is not set!")
 
-# Претвори postgres:// -> postgresql+psycopg2:// (SQLAlchemy очекува ова)
+# Претвори postgres:// -> postgresql+psycopg2://
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
 db = SQLAlchemy(app)
 
 # ------------------------------------------------------
@@ -43,39 +40,32 @@ login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
 # ------------------------------------------------------
-# Помошна функција за лозинки
-#   - Работи со pbkdf2 (werkzeug), bcrypt (passlib) ИЛИ обичен текст
+# Verify password helper
 # ------------------------------------------------------
 def verify_password(stored: str, provided: str) -> bool:
     try:
-        if not stored:
-            return False
-        # pbkdf2: (generate_password_hash од werkzeug)
         if stored.startswith("pbkdf2:"):
             return check_password_hash(stored, provided)
-        # bcrypt (passlib)
-        if stored.startswith("$2"):
+        if stored.startswith("$2"):  # bcrypt
             return bcrypt_verify.verify(provided, stored)
-        # fallback: plain text
-        return stored == provided
+        return stored == provided  # plain text
     except Exception:
         return False
 
 # ------------------------------------------------------
-# Модели
+# Models
 # ------------------------------------------------------
 class User(UserMixin, db.Model):
-    __tablename__ = "users"               # public.users во Supabase
+    __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
 
 class Klient(db.Model):
-    __tablename__ = "klienti"             # public.klienti во Supabase
+    __tablename__ = "klienti"
     id = db.Column(db.Integer, primary_key=True)
     ime = db.Column(db.String(100))
     prezime = db.Column(db.String(100))
-    # Date колона – користи current_date во БД (po-safe од datetime.utcnow)
     datum = db.Column(db.Date, default=db.func.current_date())
     dolg = db.Column(db.Numeric(10, 2), default=0)
     plateno = db.Column(db.Numeric(10, 2), default=0)
@@ -88,7 +78,7 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 # ------------------------------------------------------
-# Рути
+# Routes
 # ------------------------------------------------------
 @app.route("/")
 @login_required
@@ -131,10 +121,9 @@ def add_klient():
     return redirect(url_for("index"))
 
 # ------------------------------------------------------
-# Иницијализација: креирај табели и админ ако го нема
-#   - Ова се извршува и на Render (со Gunicorn) преку before_first_request
+# DB init (create tables + admin)
 # ------------------------------------------------------
-def _ensure_db_and_admin():
+def ensure_db_and_admin():
     db.create_all()
     admin_email = os.getenv("ADMIN_EMAIL")
     admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
@@ -144,21 +133,18 @@ def _ensure_db_and_admin():
         db.session.commit()
         print(f"✅ Admin created: {admin_email} / {admin_pass}")
 
-@app.before_first_request
-def _init_on_first_request():
-    _ensure_db_and_admin()
-
-# Healthcheck (корисно за Render)
+# ------------------------------------------------------
+# Healthcheck
+# ------------------------------------------------------
 @app.route("/health")
 def health():
     return "ok", 200
 
 # ------------------------------------------------------
-# Локално стартување (dev)
+# App start
 # ------------------------------------------------------
+with app.app_context():
+    ensure_db_and_admin()
+
 if __name__ == "__main__":
-    with app.app_context():
-        _ensure_db_and_admin()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
-
-
