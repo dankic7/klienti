@@ -1,8 +1,7 @@
 Flask
 Flask-SQLAlchemy
-Flask-Login
 python-dotenv
+Werkzeug
 psycopg2-binary==2.9.9
-gunicorn
-passlib[bcrypt]==1.7.4
+
 
