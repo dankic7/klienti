@@ -1,12 +1,10 @@
 Flask==3.0.3
-Flask-SQLAlchemy==3.1.1
+Flask_SQLAlchemy==3.1.1
 Flask-Login==0.6.3
 python-dotenv==1.0.1
 Werkzeug==3.0.3
-passlib[bcrypt]==1.7.4
-pg8000==1.31.2
-sqlalchemy[postgresql]==2.0.23
+SQLAlchemy==2.0.30
+psycopg2-binary==2.9.9
 gunicorn==21.2.0
-
 
 
