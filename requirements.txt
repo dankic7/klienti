@@ -1,6 +1,7 @@
-flask
-flask-login
-sqlalchemy
-psycopg2-binary
-passlib
-
+Flask==3.0.3
+Flask-Login==0.6.3
+Jinja2==3.1.4
+SQLAlchemy==2.0.32
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+gunicorn==21.2.0
