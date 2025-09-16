@@ -1,27 +1,46 @@
-{% extends "base.html" %}
-{% block title %}Најава – AgroFruit 2007{% endblock %}
-{% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-6 col-lg-5">
-    <div class="card shadow-sm">
-      <div class="card-body p-4">
-        <h1 class="h4 mb-3 text-center">Најава</h1>
-        <form method="post">
-          <div class="mb-3">
-            <label class="form-label">Email</label>
-            <input name="email" type="email" class="form-control form-control-lg" required>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Лозинка</label>
-            <input name="password" type="password" class="form-control form-control-lg" required>
-          </div>
-          <button class="btn btn-success w-100">Влези</button>
-        </form>
-        {% if False %}
-        <p class="text-center mt-3"><a href="{{ url_for('register') }}">Немаш корисник? Регистрирај админ</a></p>
-        {% endif %}
-      </div>
+<!doctype html>
+<html lang="mk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Најава</title>
+  <style>
+    body { font-family: sans-serif; max-width: 520px; margin: 40px auto; }
+    .alert { background:#f8d7da; color:#842029; padding:12px; border-radius:8px; margin-bottom:16px; }
+    label { display:block; margin:.5rem 0 .25rem; }
+    input { width:100%; padding:.6rem; border:1px solid #ccc; border-radius:6px; }
+    button { margin-top:12px; width:100%; padding:.7rem; border:0; border-radius:6px; background:#167c3d; color:#fff; font-weight:600; }
+    .nav { display:flex; justify-content:space-between; margin-bottom:16px; }
+    a { color:#167c3d; text-decoration:none; }
+  </style>
+</head>
+<body>
+
+  <div class="nav">
+    <div>AgroFruit 2007</div>
+    <div>
+      {% if session.get('user_id') %}
+        Најавен: {{ session.get('email') }} |
+        <a href="{{ url_for('logout') }}">Одјава</a>
+      {% else %}
+        <a href="{{ url_for('login') }}">Најава</a>
+      {% endif %}
     </div>
   </div>
-</div>
-{% endblock %}
+
+  {% if error %}
+    <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('login') }}">
+    <label for="email">Email</label>
+    <input id="email" type="email" name="email" required>
+
+    <label for="password">Лозинка</label>
+    <input id="password" type="password" name="password" required>
+
+    <button type="submit">Влези</button>
+  </form>
+
+</body>
+</html>
