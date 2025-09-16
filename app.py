@@ -2,16 +2,16 @@ import os
 from datetime import date, datetime
 from decimal import Decimal
 
-from flask import (
-    Flask, render_template, request, redirect, url_for, flash
-)
+from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import (
     LoginManager, login_user, login_required, logout_user,
     UserMixin, current_user
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# Optional – за bcrypt поддршка (за хешови од тип $2b$...)
+# ---------------------------------------------------------------------
+# Optional – за bcrypt ($2a/$2b/$2y) преку passlib, ако е инсталиран
+# ---------------------------------------------------------------------
 try:
     from passlib.hash import bcrypt  # type: ignore
     HAS_PASSLIB = True
@@ -22,18 +22,16 @@ from sqlalchemy import (
     create_engine, Column, Integer, String, Date, Numeric, text, func, DateTime
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
+from sqlalchemy.exc import ProgrammingError
 
-
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # App & Config
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 
 app = Flask(__name__)
-
-# SECRET_KEY
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET", "please-change-me")
 
-# DATABASE_URL (Render/Supabase)
+# Render/Supabase DATABASE_URL нормализација -> psycopg2
 raw_db_url = os.environ.get("DATABASE_URL", "")
 if raw_db_url.startswith("postgres://"):
     raw_db_url = raw_db_url.replace("postgres://", "postgresql+psycopg2://", 1)
@@ -43,16 +41,19 @@ elif raw_db_url.startswith("postgresql://") and "+psycopg2" not in raw_db_url:
 if not raw_db_url:
     raise RuntimeError("DATABASE_URL environment variable is not set!")
 
-engine = create_engine(raw_db_url, future=True)
+engine = create_engine(
+    raw_db_url,
+    future=True,
+    pool_pre_ping=True,
+)
 SessionLocal = scoped_session(
     sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 )
 Base = declarative_base()
 
-
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Models
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 
 class User(Base, UserMixin):
     __tablename__ = "users"
@@ -61,8 +62,7 @@ class User(Base, UserMixin):
     email = Column(String, unique=True, nullable=False, index=True)
     password = Column(String, nullable=False)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
-    # Flask-Login requires get_id(); UserMixin го има.
-
+    # UserMixin -> get_id()
 
 class Klient(Base):
     __tablename__ = "klienti"
@@ -74,43 +74,42 @@ class Klient(Base):
     dolg = Column(Numeric(12, 2), nullable=False, server_default=text("0"))
     plateno = Column(Numeric(10, 2), nullable=False, server_default=text("0"))
 
-
-# ------------------------------------------------------------------------------
-# Auth helpers (поддршка и за pbkdf2:sha256 и за bcrypt)
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# Auth helpers
+# ---------------------------------------------------------------------
 
 def hash_password_pbkdf2(plain: str) -> str:
-    """Default hashing за нови корисници (pbkdf2)."""
-    return generate_password_hash(plain)  # pbkdf2:sha256
-
+    """Default hashing за нови корисници (pbkdf2:sha256)."""
+    return generate_password_hash(plain)
 
 def verify_password(stored_hash: str, plain: str) -> bool:
     """
-    Проверува лозинка против:
+    Поддржува:
     - pbkdf2:sha256 (werkzeug)
-    - bcrypt $2a/$2b/$2y (passlib, ако е инсталиран)
+    - bcrypt $2* (passlib, ако е инсталиран)
     """
     try:
-        # pbkdf2 (werkzeug) формат
+        if not stored_hash:
+            return False
+
         if stored_hash.startswith("pbkdf2:"):
             return check_password_hash(stored_hash, plain)
 
-        # bcrypt формат – $2a / $2b / $2y
         if stored_hash.startswith("$2") and HAS_PASSLIB:
             return bcrypt.verify(plain, stored_hash)
+
+        # Непознат формат
+        return False
     except Exception:
         return False
-    return False
 
-
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Flask-Login
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 login_manager.login_message_category = "warning"
-
 
 @login_manager.user_loader
 def load_user(user_id: str):
@@ -120,22 +119,34 @@ def load_user(user_id: str):
     finally:
         db.close()
 
-
-# ------------------------------------------------------------------------------
-# DB init & ensure admin
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# DB init & DDL fixes
+# ---------------------------------------------------------------------
 
 def ensure_tables():
+    """Креира табели ако недостигаат."""
     Base.metadata.create_all(bind=engine)
 
+def apply_ddl_fixes():
+    """
+    Поправки кои create_all не ги прави:
+    - додај users.created_at ако ја нема колоната
+    """
+    with engine.begin() as conn:
+        conn.exec_driver_sql("""
+            ALTER TABLE IF EXISTS public.users
+            ADD COLUMN IF NOT EXISTS created_at timestamp NOT NULL DEFAULT now();
+        """)
 
 def ensure_admin():
-    """Креира иницијален админ ако го нема (email+password од околина)."""
+    """
+    Креира иницијален админ ако го нема (ADMIN_EMAIL/ADMIN_PASSWORD од env).
+    Лозинката се чува како pbkdf2:sha256 (werkzeug).
+    """
     admin_email = os.environ.get("ADMIN_EMAIL")
     admin_password = os.environ.get("ADMIN_PASSWORD")
 
     if not admin_email or not admin_password:
-        # Не креирaме ако недостигаат креденцијали – само лог инфо.
         app.logger.info("ADMIN_EMAIL/ADMIN_PASSWORD not provided – skipping admin creation.")
         return
 
@@ -150,15 +161,13 @@ def ensure_admin():
     finally:
         db.close()
 
-
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Routes
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 
 @app.get("/health")
 def health():
     return "ok", 200
-
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -178,10 +187,10 @@ def login():
             return redirect(url_for("login"))
 
         # GET
-        # Ако имаш templates/login.html – ќе се рендерира. Инаку, едноставен HTML.
         try:
             return render_template("login.html")
         except Exception:
+            # Фолбек ако нема темплејт
             return (
                 "<h3>Најава</h3>"
                 "<form method='post'>"
@@ -194,7 +203,6 @@ def login():
     finally:
         db.close()
 
-
 @app.get("/logout")
 @login_required
 def logout():
@@ -202,14 +210,12 @@ def logout():
     flash("Одјавени сте", "success")
     return redirect(url_for("login"))
 
-
 @app.get("/")
 @login_required
 def index():
     db = SessionLocal()
     try:
         klienti = db.query(Klient).order_by(Klient.id.desc()).limit(50).all()
-        # Пробај темплејт; ако го нема, врати едноставен текст.
         try:
             return render_template("customers.html", klienti=klienti, q="")
         except Exception:
@@ -217,20 +223,18 @@ def index():
     finally:
         db.close()
 
-
-# ------------------------------------------------------------------------------
-# App start (Render ќе го игнорира, но е корисно за локално)
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# Startup (Render го извршува при import)
+# ---------------------------------------------------------------------
 
 def _startup():
     ensure_tables()
+    apply_ddl_fixes()     # <= важен дел за твојот случај (created_at)
     ensure_admin()
     app.logger.info("Startup complete.")
-
 
 _startup()
 
 if __name__ == "__main__":
-    # Локално стартување
     port = int(os.environ.get("PORT", "8000"))
     app.run(host="0.0.0.0", port=port, debug=True)
