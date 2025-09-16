@@ -1,87 +1,93 @@
 from flask import Flask, render_template, redirect, url_for, request, flash
-from flask_login import LoginManager, login_user, logout_user, login_required, UserMixin, current_user
-import psycopg2
-import psycopg2.extras
-import bcrypt
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 import os
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "tajna_lozinka")
+app.secret_key = "tajna123"  # смени ја оваа тајна
 
-# ===== LOGIN MANAGER =====
+# ---- DATABASE ----
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL").replace(
+    "postgres://", "postgresql://"
+)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db = SQLAlchemy(app)
+
+# ---- LOGIN MANAGER ----
 login_manager = LoginManager()
 login_manager.login_view = "login"
 login_manager.init_app(app)
 
-# ===== DATABASE =====
-DATABASE_URL = os.environ.get("DATABASE_URL")  # од Render/Supabase
+# ---- MODELS ----
+class User(UserMixin, db.Model):
+    __tablename__ = "users"
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
 
-def get_db_connection():
-    return psycopg2.connect(DATABASE_URL, sslmode="require")
+class Klient(db.Model):
+    __tablename__ = "klienti"
+    id = db.Column(db.Integer, primary_key=True)
+    ime = db.Column(db.String(100), nullable=False)
+    prezime = db.Column(db.String(100), nullable=False)
+    datum = db.Column(db.Date, nullable=True)
+    dolg = db.Column(db.Numeric(10, 2), default=0)
+    platno = db.Column(db.Numeric(10, 2), default=0)
 
-# ===== USER CLASS =====
-class User(UserMixin):
-    def __init__(self, id, email, password):
-        self.id = id
-        self.email = email
-        self.password = password
-
+# ---- LOGIN MANAGER HELPERS ----
 @login_manager.user_loader
 def load_user(user_id):
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("SELECT * FROM users WHERE id = %s", (int(user_id),))
-    user = cur.fetchone()
-    conn.close()
-    if user:
-        return User(user["id"], user["email"], user["password"])
-    return None
+    return User.query.get(int(user_id))
 
-# ===== ROUTES =====
-
+# ---- ROUTES ----
 @app.route("/")
 @login_required
 def index():
-    return redirect(url_for("klienti"))  # секогаш оди на муштерии
+    q = request.args.get("q", "")
+    if q:
+        customers = Klient.query.filter(
+            (Klient.ime.ilike(f"%{q}%")) | (Klient.prezime.ilike(f"%{q}%"))
+        ).all()
+    else:
+        customers = Klient.query.order_by(Klient.id).all()
+    return render_template("customers.html", customers=customers, q=q)
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         email = request.form["email"]
         password = request.form["password"]
-
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        cur.execute("SELECT * FROM users WHERE email = %s", (email,))
-        user = cur.fetchone()
-        conn.close()
-
-        if user and bcrypt.checkpw(password.encode("utf-8"), user["password"].encode("utf-8")):
-            user_obj = User(user["id"], user["email"], user["password"])
-            login_user(user_obj)
-            return redirect(url_for("klienti"))  # после успешен login
+        user = User.query.filter_by(email=email).first()
+        if user and check_password_hash(user.password, password):
+            login_user(user)
+            return redirect(url_for("index"))
         else:
             flash("Погрешен емаил или лозинка", "danger")
-
     return render_template("login.html")
 
 @app.route("/logout")
 @login_required
 def logout():
     logout_user()
-    flash("Успешно се одјавивте.", "success")
     return redirect(url_for("login"))
 
-@app.route("/klienti")
-@login_required
-def klienti():
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("SELECT * FROM klienti ORDER BY id ASC")
-    klienti = cur.fetchall()
-    conn.close()
-    return render_template("klienti.html", klienti=klienti)
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        email = request.form["email"]
+        password = request.form["password"]
+        if User.query.filter_by(email=email).first():
+            flash("Овој емаил веќе постои", "danger")
+            return redirect(url_for("register"))
+        hashed_pw = generate_password_hash(password)
+        new_user = User(email=email, password=hashed_pw)
+        db.session.add(new_user)
+        db.session.commit()
+        flash("Корисникот е креиран. Најави се.", "success")
+        return redirect(url_for("login"))
+    return render_template("register.html")
 
-# ===== START =====
+# ---- START ----
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
