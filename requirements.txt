@@ -1,8 +1,6 @@
-Flask==3.0.3
-Flask-Login==0.6.3
-Werkzeug==3.0.3
-SQLAlchemy==2.0.32
-psycopg2-binary==2.9.9
-passlib==1.7.4
-python-dotenv==1.0.1
+flask
+flask-login
+sqlalchemy
+psycopg2-binary
+passlib
 
