@@ -3,7 +3,6 @@ Flask-Login==0.6.3
 Werkzeug==3.0.3
 SQLAlchemy==2.0.32
 psycopg2-binary==2.9.9
-passlib[bcrypt]==1.7.4
+passlib==1.7.4
 python-dotenv==1.0.1
-
 
