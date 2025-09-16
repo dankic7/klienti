@@ -19,7 +19,7 @@
         </button>
         <div id="nav" class="collapse navbar-collapse">
           <ul class="navbar-nav ms-auto">
-            {% if current_user.is_authenticated %}
+            {% if session.get('user_id') %}
               <li class="nav-item"><a class="nav-link" href="{{ url_for('index') }}">Муштерии</a></li>
               <li class="nav-item"><a class="nav-link" href="{{ url_for('logout') }}">Одјава</a></li>
             {% else %}
